@@ -29,13 +29,13 @@ let askExit = false;
 function exitDialog() {
   if (!askExit) return "";
   return `<div class="absolute inset-0 z-40 bg-black/60 flex items-center justify-center">
-    <div class="bg-page border border-line rounded-full w-[460px] p-6 shadow-xl">
-      <div class="text-[18px] font-semibold mb-2">Atenção!</div>
+    <div class="bg-card border border-line rounded-2xl w-[460px] p-6 shadow-[var(--shadow)]">
+      <div class="label !text-attention mb-2">Atenção</div><div class="text-[20px] font-semibold mb-2" style="font-family:var(--font-display)">Fechar o Escudo?</div>
       <p class="text-[14px] text-muted mb-5">Você vai fechar o Escudo. O bloqueio aplicado no Windows pode continuar funcionando depois de fechar.</p>
       <div class="flex flex-col gap-2">
-        <button class="bg-accent hover:bg-accent-hover active:bg-accent-pressed text-on-accent rounded-[10px] h-10 text-[14px] font-semibold" data-act="exit-keep">Fechar, mas continuar filtrando</button>
-        <button class="border border-line hover:bg-card rounded-[10px] h-10 text-[14px]" data-act="exit-stop">Sair e parar a proteção</button>
-        <button class="hover:bg-card rounded-[10px] h-10 text-[14px] text-muted" data-act="exit-cancel">Cancelar</button>
+        <button class="bg-accent hover:bg-accent-hover active:bg-accent-pressed text-on-accent rounded-full h-10 text-[14px] font-semibold" data-act="exit-keep">Fechar, mas continuar filtrando</button>
+        <button class="border border-line hover:bg-card-hover rounded-full h-10 text-[14px]" data-act="exit-stop">Sair e parar a proteção</button>
+        <button class="hover:bg-card-hover rounded-full h-10 text-[14px] text-muted" data-act="exit-cancel">Cancelar</button>
       </div>
     </div>
   </div>`;
@@ -57,16 +57,16 @@ function sidebar() {
   const top = ui.route.split("/")[0];
   const item = (route: string, label: string, ic: string, act = "go") => {
     const active = top === route;
-    return `<button class="nav flex items-center gap-3 h-14 w-full ${wide ? "px-4" : "justify-center"} ${active ? "bg-card" : "hover:bg-card/60"} text-brand" data-act="${act}" data-arg="${route}" title="${label}" aria-current="${active}">
-      ${ic}${wide ? `<span class="text-ink text-[14px] truncate">${label}</span>` : ""}
+    return `<button class="nav flex items-center gap-3 h-14 w-full ${wide ? "px-4" : "justify-center"} ${active ? "bg-card text-brand" : "text-muted hover:text-ink hover:bg-card/60"}" data-act="${act}" data-arg="${route}" title="${label}" aria-current="${active}">
+      ${ic}${wide ? `<span class="${active ? "text-ink font-semibold" : ""} text-[14px] truncate">${label}</span>` : ""}
     </button>`;
   };
   return `<nav class="h-full ${wide ? "w-[220px]" : "w-[56px]"} shrink-0 border-r border-sideline flex flex-col bg-page" data-tauri-drag-region>
-    <div class="h-[72px] flex items-center ${wide ? "px-4 gap-3" : "justify-center"}" data-tauri-drag-region>${icon.logo(24)}${wide ? `<span class="font-semibold text-[16px]">Escudo</span>` : ""}</div>
+    <div class="h-[72px] flex items-center ${wide ? "px-4 gap-3" : "justify-center"}" data-tauri-drag-region>${icon.logo(28)}${wide ? `<span class="text-[17px] font-bold tracking-[-0.02em]" style="font-family:var(--font-display)">escudo<span class="text-brand">.</span></span>` : ""}</div>
     ${nav.map(([r, l, ic]) => item(r, l, ic())).join("")}
     ${item("updates", ui.view.updating ? "Atualizando filtros…" : "Verificar atualizações", `<span class="${ui.view.updating ? "spin inline-block" : ""}">${icon.refresh()}</span>`, "update-filters")}
     <div class="flex-1" data-tauri-drag-region></div>
-    <button class="h-14 flex items-center ${wide ? "px-4 gap-3" : "justify-center"} text-ink hover:text-brand" data-act="flip" data-arg="sidebar_expanded" title="${wide ? "Ocultar" : "Expandir"}">
+    <button class="h-14 flex items-center ${wide ? "px-4 gap-3" : "justify-center"} text-faint hover:text-ink" data-act="flip" data-arg="sidebar_expanded" title="${wide ? "Ocultar" : "Expandir"}">
       ${wide ? icon.chevronLeft() : icon.chevronRight()}${wide ? `<span class="text-[14px]">Ocultar</span>` : ""}
     </button>
   </nav>`;
@@ -123,7 +123,7 @@ function render() {
     ${sidebar()}
     <main id="content" class="relative flex-1 h-full overflow-y-auto">${page()}</main>
     ${exitDialog()}
-    ${toastText ? `<div class="absolute bottom-5 left-1/2 -translate-x-1/2 bg-card text-ink text-[14px] px-4 py-2.5 rounded-[10px] shadow-lg z-30">${esc(toastText)}</div>` : ""}
+    ${toastText ? `<div class="absolute bottom-5 left-1/2 -translate-x-1/2 bg-ink text-page text-[14px] font-medium px-5 py-2.5 rounded-full shadow-[var(--shadow)] z-30 flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>${esc(toastText)}</div>` : ""}
   </div>`;
   if (sameRoute) document.getElementById("content")!.scrollTop = keep;
 }

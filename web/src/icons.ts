@@ -3,8 +3,9 @@ const svg = (body: string, size = 24) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 
 export const icon = {
+  // Escudo mark: shield in "Sinal" lime with an E monogram that doubles as filter rows.
   logo: (s = 24) =>
-    `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5 4 5.5v6.2c0 4.6 3.3 8.3 8 9.8 4.7-1.5 8-5.2 8-9.8V5.5z" fill="#67B279"/><path d="m8.6 12.2 2.4 2.4 4.6-4.8" fill="none" stroke="#1f1f1f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 1.8 3.6 4.9v6.6c0 5 3.4 9 8.4 10.9 5-1.9 8.4-5.9 8.4-10.9V4.9z" fill="#C5F04A"/><path d="M15.6 7.6H8.6v8.6h7M8.6 11.9h4.8" fill="none" stroke="#12160A" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   home: (s = 24) => svg(`<path d="M4 10.5 12 4l8 6.5V20h-5v-6h-6v6H4z"/>`, s),
   shield: (s = 24) => svg(`<path d="M12 3 5 5.8v5.7c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V5.8z"/><path d="m9 12 2.2 2.2L15.5 10"/>`, s),
   pie: (s = 24) => svg(`<path d="M11 4.1A8 8 0 1 0 19.9 13H11z"/><path d="M14 3.2V10h6.8A7.5 7.5 0 0 0 14 3.2z"/>`, s),
