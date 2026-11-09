@@ -1,0 +1,7 @@
+node_modules
+
+mechanics.json
+MECHANICS.md
+/installer
+/dist
+/target

@@ -1,0 +1,246 @@
+@import "tailwindcss";
+
+/*
+ * Escudo — identidade visual "Guarda noturna"
+ * Grafite azulado + verde-lima "Sinal". Ver BRAND.md.
+ *
+ *   accent      preenchimento de marca (botões, switch ligado, barras)
+ *   on-accent   texto/ícone sobre o accent (sempre escuro)
+ *   brand       accent usado como texto/ícone — ajustado por tema p/ contraste
+ */
+:root,
+:root[data-theme="dark"] {
+  --page: #0e1013;
+  --card: #171a1f;
+  --card-hover: #21252c;
+  --card-pressed: #2b3039;
+  --text: #eceff3;
+  --muted: #a3abb6;
+  --faint: #6b7380;
+  --line: #252a31;
+  --sideline: #1b1f25;
+  --input: #171a1f;
+  --row-blocked: #3a1a1c;
+  --row-allowed: #1f2b12;
+  --row-changed: #3a2c10;
+  --switch-off: #3a404a;
+  --accent-fg: #c5f04a;
+  --danger: #ff6b5e;
+  --attention: #ffb547;
+  --grid: rgba(197, 240, 74, 0.07);
+  --glow: rgba(197, 240, 74, 0.16);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme="light"] {
+  --page: #f4f5f1;
+  --card: #ffffff;
+  --card-hover: #eceee8;
+  --card-pressed: #e0e3db;
+  --text: #14171b;
+  --muted: #545c66;
+  --faint: #8a929c;
+  --line: #e1e4dc;
+  --sideline: #e6e8e2;
+  --input: #ffffff;
+  --row-blocked: #fde6e3;
+  --row-allowed: #eaf6d6;
+  --row-changed: #fbf0d9;
+  --switch-off: #c9cdd3;
+  --accent-fg: #4a7300;
+  --danger: #e5483a;
+  --attention: #b86f00;
+  --grid: rgba(20, 23, 27, 0.07);
+  --glow: rgba(150, 200, 30, 0.22);
+  --shadow: 0 12px 32px rgba(20, 23, 27, 0.12);
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-card-pressed: var(--card-pressed);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-sideline: var(--sideline);
+  --color-field: var(--input);
+  --color-row-blocked: var(--row-blocked);
+  --color-row-allowed: var(--row-allowed);
+  --color-row-changed: var(--row-changed);
+  --color-switch-off: var(--switch-off);
+  --color-brand: var(--accent-fg);
+  --color-accent: #c5f04a;
+  --color-accent-hover: #d4f76e;
+  --color-accent-pressed: #aed834;
+  --color-on-accent: #12160a;
+  --color-danger: var(--danger);
+  --color-attention: var(--attention);
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-pressed) transparent;
+}
+
+::selection {
+  background: #c5f04a;
+  color: #12160a;
+}
+
+textarea,
+input,
+select {
+  user-select: text;
+  border: 1px solid var(--line);
+}
+
+/* Rótulo técnico: mono, caixa alta, espaçado — assinatura tipográfica */
+.label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--switch-off);
+  transition: background 0.15s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 0.18s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.switch[data-on="true"] {
+  background: #c5f04a;
+}
+.switch[data-on="true"]::after {
+  background: #12160a;
+  transform: translateX(18px);
+}
+.switch[data-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Item ativo da barra lateral: filete de marca à esquerda */
+.nav[aria-current="true"] {
+  position: relative;
+}
+.nav[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-fg);
+}
+
+/* Tela inicial: grade de varredura + emblema com anéis */
+.scan-grid {
+  background-image: radial-gradient(var(--grid) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 42%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 60% 55% at 50% 42%, #000 30%, transparent 100%);
+}
+.emblem {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+}
+.emblem::before,
+.emblem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.emblem::after {
+  inset: 18px;
+}
+.emblem[data-on="true"] {
+  filter: drop-shadow(0 0 28px var(--glow));
+}
+.emblem[data-on="true"]::before {
+  border-color: var(--accent-fg);
+  opacity: 0.35;
+  animation: pulse 3.2s ease-out infinite;
+}
+.emblem[data-on="false"] {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+@keyframes pulse {
+  0% {
+    transform: scale(0.86);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+
+.icon-btn svg,
+.nav svg {
+  display: block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emblem::before {
+    animation: none !important;
+  }
+}
