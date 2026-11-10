@@ -21,6 +21,8 @@ pub enum Category {
     Parental,
     /// built-in list against ads on streaming platforms (src/streaming.rs)
     Streaming,
+    /// domains blocked by the AI review (src/ai.rs)
+    Ai,
     Other,
 }
 
@@ -185,7 +187,7 @@ const UNSUPPORTED_OPTIONS: &[&str] = &[
 fn hosts_priority(c: Category) -> u8 {
     match c {
         // small hand-picked lists first, so the hosts limit never cuts them
-        Category::User | Category::Parental | Category::Streaming => 0,
+        Category::User | Category::Parental | Category::Streaming | Category::Ai => 0,
         Category::Ads | Category::Trackers | Category::Annoyances | Category::Other => 1,
         Category::Security => 2,
         Category::Dns => 3,

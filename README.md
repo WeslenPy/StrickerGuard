@@ -16,6 +16,10 @@ bloqueio no Windows inteiro pelo arquivo `hosts` e pela troca do servidor DNS.
 
 ## Recursos
 
+- **Análise por IA (opcional, desligada por padrão)**: domínios que nenhuma lista conhece são
+  analisados em lotes por um modelo escolhido pelo usuário: Claude (API da Anthropic) ou qualquer
+  servidor compatível com OpenAI (OpenAI, OpenRouter, LM Studio, Ollama local). Vereditos fortes
+  podem ser bloqueados sozinhos; o resto vai para uma lista de revisão. Tudo pode ser desfeito.
 - **Anúncios em plataformas de streaming**: lista própria com os servidores de anúncio em vídeo e
   áudio (Google IMA/DoubleClick, Amazon, Spotify, Hulu, FreeWheel, SpotX…), com prioridade no
   arquivo `hosts`. Anúncios inseridos no mesmo fluxo do vídeo (comum no YouTube e na Twitch) não
@@ -48,7 +52,24 @@ permissão.
 > travado (somente leitura, Windows Defender ou antivírus). O app avisa isso na tela inicial.
 
 As listas de filtros são baixadas de `filters.adtidy.org` e atualizadas automaticamente (ou pelo
-botão **Verificar atualizações** na barra lateral). Nenhum dado de navegação é enviado para fora.
+botão **Verificar atualizações** na barra lateral). Nenhum dado de navegação é enviado para fora,
+exceto se você ativar a análise por IA com um serviço na nuvem.
+
+### Análise por IA
+
+1. O monitor de DNS (a cada 30 s) pega os nomes que o Windows resolveu e que nenhuma lista,
+   regra ou lista de permissões decide. Nomes locais, IPs e serviços muito conhecidos ficam de fora.
+2. Os nomes entram numa fila; um lote de até 50 é enviado quando a fila enche ou a cada 5 min.
+   Só o nome do domínio vai, nunca o endereço da página.
+3. O modelo responde em JSON validado: `malicious`, `ads`, `tracker`, `suspicious` ou `benign`,
+   com confiança e motivo. Respostas sobre nomes que não foram enviados são descartadas.
+4. Com "bloquear automaticamente" ligado, `ads`/`tracker`/`malicious` com confiança ≥ 85% são
+   bloqueados (no motor e no `hosts`, com prioridade). O resto vai para **Proteção → Análise por IA**,
+   onde você bloqueia, libera ou desfaz.
+
+Cada nome é analisado uma vez (vereditos em `ai.json`). A chave de API fica no Gerenciador de
+Credenciais do Windows (`StrickerGuard/ai-key/<serviço>`), nunca em `settings.json`. Com um
+servidor local (ex.: Ollama em `http://localhost:11434/v1`) nada sai do computador.
 
 ## Requisitos
 

@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai;
 mod catalog;
 mod engine;
 mod state;
@@ -29,6 +30,10 @@ struct Core {
     applied_dns: Mutex<Option<String>>,
     seen_dns: Mutex<HashMap<String, i64>>,
     pause_gen: AtomicU64,
+    /// AI review: verdicts, queue, last run (ai.json)
+    ai: Mutex<ai::AiStore>,
+    /// a batch is being analysed right now
+    ai_running: AtomicBool,
 }
 
 type Shared = Arc<Core>;
@@ -397,13 +402,13 @@ fn open_link(url: String) {
 fn dns_monitor(app: AppHandle, core: Shared) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(30));
-        let (on, stats) = {
+        let (on, stats, ai_on) = {
             let s = core.settings.lock().unwrap();
-            (s.protection_enabled, s.statistics_enabled)
+            (s.protection_enabled, s.statistics_enabled, s.ai_enabled)
         };
         // wait while lists are downloading or the rules are being rebuilt
         let ready = !core.busy.load(Ordering::SeqCst) && !core.updating.load(Ordering::SeqCst);
-        if on && stats && ready {
+        if on && (stats || ai_on) && ready {
             let mut cmd = std::process::Command::new("powershell");
             // entries answered with 0.0.0.0 come from the hosts file, not from real lookups
             cmd.args([
@@ -434,7 +439,22 @@ fn dns_monitor(app: AppHandle, core: Shared) {
                         }
                     }
                 }
-                if !fresh.is_empty() {
+                if ai_on && !fresh.is_empty() {
+                    // names no list has an opinion on go to the AI queue
+                    let eng = core.engine.read().unwrap();
+                    let unknown: Vec<&String> =
+                        fresh.iter().filter(|h| ai::candidate(h) && eng.check(h).action == engine::Action::Passed).collect();
+                    drop(eng);
+                    if !unknown.is_empty() {
+                        let mut a = core.ai.lock().unwrap();
+                        let added = unknown.into_iter().filter(|h| a.enqueue(h)).count();
+                        if added > 0 {
+                            core.store.save_ai(&a);
+                            let _ = app.emit("ai-changed", ());
+                        }
+                    }
+                }
+                if stats && !fresh.is_empty() {
                     let eng = core.engine.read().unwrap();
                     let entries: Vec<LogEntry> = fresh
                         .iter()
@@ -533,6 +553,218 @@ async fn quit_app(app: AppHandle, keep_filtering: bool) {
     app.exit(0);
 }
 
+// ---------- AI review of unknown domains (src/ai.rs) ----------
+
+fn ai_provider(s: &Settings) -> ai::Provider {
+    ai::Provider {
+        kind: s.ai_provider.clone(),
+        model: s.ai_model.clone(),
+        endpoint: s.ai_endpoint.clone(),
+        key: system::api_key_load(&s.ai_provider),
+    }
+}
+
+#[derive(Serialize)]
+struct AiItem {
+    domain: String,
+    verdict: String,
+    confidence: f64,
+    reason: String,
+    at: i64,
+    status: ai::Status,
+    by_user: bool,
+}
+
+#[derive(Serialize)]
+struct AiView {
+    has_key: bool,
+    /// what stops the analysis from running, if anything
+    problem: Option<String>,
+    /// false for a server on this PC (nothing leaves the computer)
+    remote: bool,
+    running: bool,
+    queue: usize,
+    analyzed: u64,
+    last_run: Option<i64>,
+    last_error: Option<String>,
+    blocked: usize,
+    review: usize,
+    /// blocked / review / allowed names, newest first (benign ones are only counted)
+    items: Vec<AiItem>,
+}
+
+fn ai_view(core: &Core) -> AiView {
+    let settings = core.settings.lock().unwrap().clone();
+    let p = ai_provider(&settings);
+    let a = core.ai.lock().unwrap();
+    let mut items: Vec<AiItem> = a
+        .entries
+        .iter()
+        .filter(|(_, e)| e.status != ai::Status::Benign)
+        .map(|(d, e)| AiItem {
+            domain: d.clone(),
+            verdict: e.verdict.clone(),
+            confidence: e.confidence,
+            reason: e.reason.clone(),
+            at: e.at,
+            status: e.status,
+            by_user: e.by_user,
+        })
+        .collect();
+    items.sort_by(|x, y| y.at.cmp(&x.at));
+    items.truncate(500);
+    AiView {
+        has_key: p.key.is_some(),
+        problem: p.problem().map(String::from),
+        remote: p.is_remote(),
+        running: core.ai_running.load(Ordering::SeqCst),
+        queue: a.queue.len(),
+        analyzed: a.analyzed,
+        last_run: a.last_run,
+        last_error: a.last_error.clone(),
+        blocked: a.entries.values().filter(|e| e.status == ai::Status::Blocked).count(),
+        review: a.entries.values().filter(|e| e.status == ai::Status::Review).count(),
+        items,
+    }
+}
+
+/// Sends one batch from the queue. Returns an error message when it could not.
+fn ai_run_batch(app: &AppHandle, core: &Shared) -> Result<(), String> {
+    if core.ai_running.swap(true, Ordering::SeqCst) {
+        return Ok(()); // one at a time
+    }
+    let _ = app.emit("ai-changed", ());
+    let settings = core.settings.lock().unwrap().clone();
+    let provider = ai_provider(&settings);
+    let batch: Vec<String> = {
+        let mut a = core.ai.lock().unwrap();
+        let n = a.queue.len().min(ai::BATCH);
+        a.queue.drain(..n).collect()
+    };
+    let result = if batch.is_empty() { Ok(vec![]) } else { ai::classify(&provider, &batch) };
+    let now = chrono::Utc::now().timestamp();
+    let newly_blocked = {
+        let mut a = core.ai.lock().unwrap();
+        a.last_run = Some(now);
+        let out = match result {
+            Ok(results) => {
+                a.analyzed += results.len() as u64;
+                a.last_error = None;
+                // names the model skipped go back to the end of the queue once
+                let answered: std::collections::HashSet<String> = results.iter().map(|v| v.domain.clone()).collect();
+                let blocked = a.apply(results, settings.ai_auto_block, now);
+                for d in batch.iter().filter(|d| !answered.contains(*d)) {
+                    a.entries.insert(
+                        d.clone(),
+                        ai::Entry { verdict: "benign".into(), confidence: 0.0, reason: "Sem resposta da IA".into(), at: now, status: ai::Status::Benign, by_user: false },
+                    );
+                }
+                Ok(blocked)
+            }
+            Err(e) => {
+                // put the batch back in front, try again on the next round
+                let rest = std::mem::take(&mut a.queue);
+                a.queue = batch.into_iter().chain(rest).collect();
+                a.last_error = Some(e.clone());
+                Err(e)
+            }
+        };
+        core.store.save_ai(&a);
+        out
+    };
+    core.ai_running.store(false, Ordering::SeqCst);
+    if let Ok(n) = newly_blocked {
+        if n > 0 {
+            rebuild(app, core);
+            let _ = app.emit("toast", format!("Análise por IA: {n} domínio(s) bloqueado(s)"));
+        }
+    }
+    let _ = app.emit("ai-changed", ());
+    newly_blocked.map(|_| ())
+}
+
+/// Checks the queue every 20 s and sends a batch when it is full or has waited long enough.
+fn ai_worker(app: AppHandle, core: Shared) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        let (on, ready) = {
+            let s = core.settings.lock().unwrap();
+            (s.ai_enabled && s.protection_enabled, ai_provider(&s).problem().is_none())
+        };
+        let due = core.ai.lock().unwrap().due(chrono::Utc::now().timestamp());
+        if on && ready && due {
+            let _ = ai_run_batch(&app, &core);
+        }
+    });
+}
+
+#[tauri::command]
+fn ai_state(core: State<Shared>) -> AiView {
+    ai_view(&core)
+}
+
+#[tauri::command]
+async fn ai_set_key(core: State<'_, Shared>, key: String) -> Result<AiView, String> {
+    let key = key.trim().to_string();
+    if key.is_empty() || key.len() > 512 || key.chars().any(char::is_whitespace) {
+        return Err("Chave inválida.".into());
+    }
+    let provider = core.settings.lock().unwrap().ai_provider.clone();
+    tauri::async_runtime::spawn_blocking(move || system::api_key_save(&provider, &key)).await.map_err(|e| e.to_string())??;
+    Ok(ai_view(&core))
+}
+
+#[tauri::command]
+fn ai_clear_key(core: State<Shared>) -> AiView {
+    let provider = core.settings.lock().unwrap().ai_provider.clone();
+    system::api_key_delete(&provider);
+    ai_view(&core)
+}
+
+/// The user's call on one name: "block", "allow" (never block) or "undo" (back to review).
+#[tauri::command]
+fn ai_decide(app: AppHandle, core: State<Shared>, domain: String, action: String) -> Result<AiView, String> {
+    let changed_block = {
+        let mut a = core.ai.lock().unwrap();
+        let e = a.entries.get_mut(&domain).ok_or("Domínio não encontrado.")?;
+        let before = e.status;
+        e.status = match action.as_str() {
+            "block" => ai::Status::Blocked,
+            "allow" => ai::Status::Allowed,
+            "undo" => ai::Status::Review,
+            _ => return Err("Ação desconhecida.".into()),
+        };
+        e.by_user = action != "undo";
+        let changed = (before == ai::Status::Blocked) != (e.status == ai::Status::Blocked);
+        core.store.save_ai(&a);
+        changed
+    };
+    if changed_block {
+        rebuild(&app, &core);
+    }
+    Ok(ai_view(&core))
+}
+
+#[tauri::command]
+async fn ai_run_now(app: AppHandle, core: State<'_, Shared>) -> Result<AiView, String> {
+    let c: Shared = core.inner().clone();
+    let a2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || ai_run_batch(&a2, &c)).await.map_err(|e| e.to_string())??;
+    Ok(ai_view(&core))
+}
+
+/// Forgets every verdict and the queue (blocked names are released).
+#[tauri::command]
+fn ai_forget(app: AppHandle, core: State<Shared>) -> AiView {
+    {
+        let mut a = core.ai.lock().unwrap();
+        *a = ai::AiStore::default();
+        core.store.save_ai(&a);
+    }
+    rebuild(&app, &core);
+    ai_view(&core)
+}
+
 fn main() {
     // started with Windows: stay in the tray
     let minimized = std::env::args().any(|a| a == "--minimized");
@@ -566,6 +798,7 @@ fn main() {
             let settings = store.load_settings();
             let log = store.load_log();
             let meta = store.load_meta();
+            let ai_store = store.load_ai();
             let core: Shared = Arc::new(Core {
                 store,
                 settings: Mutex::new(settings.clone()),
@@ -578,6 +811,8 @@ fn main() {
                 system_msg: Mutex::new(None),
                 applied_dns: Mutex::new(None),
                 seen_dns: Mutex::new(HashMap::new()),
+                ai: Mutex::new(ai_store),
+                ai_running: AtomicBool::new(false),
                 pause_gen: AtomicU64::new(0),
             });
             app.manage(core.clone());
@@ -595,6 +830,7 @@ fn main() {
                 start_update(&handle, &core, stale);
             }
             dns_monitor(handle.clone(), core.clone());
+            ai_worker(handle.clone(), core.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -610,7 +846,13 @@ fn main() {
             relaunch_admin,
             test_dns,
             open_link,
-            quit_app
+            quit_app,
+            ai_state,
+            ai_set_key,
+            ai_clear_key,
+            ai_decide,
+            ai_run_now,
+            ai_forget
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o app");

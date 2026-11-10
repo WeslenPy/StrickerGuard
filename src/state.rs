@@ -18,6 +18,16 @@ pub struct Settings {
     pub block_search_ads: bool,
     /// built-in list against ads on streaming platforms (src/streaming.rs)
     pub block_streaming_ads: bool,
+    /// AI review of unknown domains (src/ai.rs); off by default: names are sent to Anthropic
+    pub ai_enabled: bool,
+    /// block strong AI verdicts without asking
+    pub ai_auto_block: bool,
+    /// "anthropic" or "openai_compat" (OpenAI, OpenRouter, LM Studio, Ollama…)
+    pub ai_provider: String,
+    /// model id, chosen by the user
+    pub ai_model: String,
+    /// base address of an OpenAI-compatible server (…/v1)
+    pub ai_endpoint: String,
     pub language_specific: bool,
     pub language_auto: bool,
     pub user_rules_enabled: bool,
@@ -86,6 +96,11 @@ impl Default for Settings {
             basic_protection: true,
             block_search_ads: true,
             block_streaming_ads: true,
+            ai_enabled: false,
+            ai_auto_block: true,
+            ai_provider: "anthropic".into(),
+            ai_model: crate::ai::DEFAULT_ANTHROPIC_MODEL.into(),
+            ai_endpoint: crate::ai::DEFAULT_COMPAT_ENDPOINT.into(),
             language_specific: true,
             language_auto: true,
             user_rules_enabled: true,
@@ -179,6 +194,7 @@ impl Settings {
             if let Some(f) = catalog::find(k) {
                 let section_on = match f.category {
                     Category::Ads | Category::Streaming | Category::Other => self.ad_blocking,
+                    Category::Ai => self.ai_enabled,
                     Category::Trackers => self.tracking_protection,
                     Category::Annoyances => self.annoyance_blocking,
                     Category::Security => self.browsing_security || (f.kind == Kind::Dns && self.dns_protection),
@@ -296,6 +312,12 @@ impl Store {
     pub fn save_meta(&self, m: &BTreeMap<String, FilterMeta>) {
         self.write_json("filters.json", m)
     }
+    pub fn load_ai(&self) -> crate::ai::AiStore {
+        self.read_json("ai.json")
+    }
+    pub fn save_ai(&self, a: &crate::ai::AiStore) {
+        self.write_json("ai.json", a)
+    }
     pub fn filter_path(&self, key: &str) -> PathBuf {
         self.dir.join("filters").join(format!("{key}.txt"))
     }
@@ -329,6 +351,12 @@ pub fn build_engine(store: &Store, s: &Settings) -> Engine {
             let o = Origin { source: Arc::from(crate::streaming::SOURCE), category: Category::Streaming };
             for r in crate::streaming::rules() {
                 e.add_rule(&r, &o, true);
+            }
+        }
+        if s.ai_enabled {
+            let o = Origin { source: Arc::from(crate::ai::SOURCE), category: Category::Ai };
+            for h in store.load_ai().blocked() {
+                e.add_rule(&format!("||{h}^"), &o, true);
             }
         }
         if s.ad_blocking && s.user_rules_enabled {

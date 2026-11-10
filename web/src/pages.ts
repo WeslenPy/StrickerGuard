@@ -1,5 +1,5 @@
 // Every screen of the app, rendered as HTML strings from the current state.
-import type { FilterView, LogEntry, Stats, Verdict, View } from "./api";
+import type { AiItem, AiView, FilterView, LogEntry, Stats, Verdict, View } from "./api";
 import { icon } from "./icons";
 import { btn, esc, fmtDate, fmtNum, pageHead, row, sw } from "./ui";
 
@@ -16,6 +16,8 @@ export interface Ui {
   dnsTest: Record<string, string>;
   /** key of the system message the user closed (see msgKey) */
   dismissedMsg: string;
+  /** AI review state, loaded on its screen */
+  ai: AiView | null;
 }
 
 const s = (u: Ui) => u.view.settings;
@@ -128,6 +130,7 @@ export function protection(u: Ui) {
       ${row({ ico: icon.security(), title: "Segurança da navegação", desc: "Bloqueia solicitações a sites maliciosos e de phishing", toggle: "flip", arg: "browsing_security", on: st.browsing_security, open: "protection/security" })}
       ${row({ ico: icon.dns(24), title: "Proteção de DNS", desc: "Protege contra anúncios, rastreadores e ameaças no nível do DNS", toggle: "flip", arg: "dns_protection", on: st.dns_protection, open: "protection/dns" })}
       ${row({ ico: icon.parental(), title: "Controle parental", desc: "Bloqueia o acesso a conteúdo indesejável", toggle: "flip", arg: "parental_control", on: st.parental_control, open: "protection/parental" })}
+      ${row({ ico: icon.ai(), title: "Análise por IA", desc: st.ai_enabled ? "Ativada: domínios desconhecidos são analisados pelo modelo escolhido" : "Opcional: um modelo de IA analisa domínios que nenhuma lista conhece", open: "protection/ai" })}
       ${row({ ico: icon.globe(), title: "Lista de permissões de sites", desc: "Sites que nunca são bloqueados", open: "protection/allowlist" })}
     </div>
   </div>`;
@@ -493,5 +496,122 @@ export function about(u: Ui) {
     <div class="flex items-center gap-4 mb-6">${icon.logo(56)}<div><div class="text-[22px] font-semibold">StrickerGuard</div><div class="text-muted text-[14px]">Versão ${esc(v.version)}</div></div></div>
     <p class="text-[14px] text-muted max-w-[600px]">Bloqueador de anúncios, rastreadores e sites perigosos. As listas de bloqueio são baixadas de filters.adtidy.org; as regras são verificadas no seu computador e nada é enviado para fora.</p>
     <div class="mt-6 text-[13px] text-muted">Pasta de dados: <span class="font-mono">${esc(v.data_dir)}</span></div>
+  </div>`;
+}
+
+// ---------- AI review ----------
+
+const AI_MODELS: Record<string, string[]> = {
+  anthropic: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
+  openai_compat: ["llama3.1", "qwen2.5", "mistral"],
+};
+
+const VERDICT: Record<string, [string, string]> = {
+  malicious: ["Ameaça", "text-danger"],
+  ads: ["Anúncios", "text-brand"],
+  tracker: ["Rastreador", "text-attention"],
+  suspicious: ["Suspeito", "text-attention"],
+  benign: ["Seguro", "text-muted"],
+};
+
+function aiRow(it: AiItem) {
+  const [label, color] = VERDICT[it.verdict] ?? [it.verdict, "text-muted"];
+  const b = (lbl: string, act: string, kind = "border border-line hover:bg-card-hover") =>
+    `<button class="${kind} rounded-full px-3.5 h-8 text-[13px] shrink-0" data-act="${act}" data-arg="${esc(it.domain)}">${lbl}</button>`;
+  const actions =
+    it.status === "review"
+      ? b("Bloquear", "ai-block", "bg-accent hover:bg-accent-hover text-on-accent font-semibold") + b("Liberar", "ai-allow")
+      : it.status === "blocked"
+        ? b("Liberar", "ai-allow") + b("Desfazer", "ai-undo")
+        : b("Desfazer", "ai-undo");
+  const who = it.by_user ? " · decidido por você" : it.status === "blocked" ? " · bloqueado automaticamente" : "";
+  return `<div class="flex items-center gap-4 px-4 py-3 border-b border-line last:border-b-0">
+    <div class="flex-1 min-w-0">
+      <div class="font-mono text-[13px] truncate select-text">${esc(it.domain)}</div>
+      <div class="text-[12px] text-muted mt-0.5"><span class="${color} font-semibold">${label}</span> · ${Math.round(it.confidence * 100)}%${who} · ${esc(it.reason)}</div>
+    </div>
+    <div class="flex gap-2">${actions}</div>
+  </div>`;
+}
+
+export function aiReview(u: Ui) {
+  const st = s(u);
+  const a = u.ai;
+  const head = pageHead(
+    "Análise por IA",
+    "Domínios que nenhuma lista conhece são analisados por um modelo de IA escolhido por você. Anúncios, rastreadores e ameaças podem ser bloqueados automaticamente ou ir para a sua revisão.",
+    "protection",
+  );
+  if (!st.ai_enabled) {
+    return `<div class="px-8 pt-10 pb-8">${head}
+      <div class="rounded-[10px] bg-card border border-line p-5 max-w-[640px]">
+        <div class="label mb-2">Antes de ativar</div>
+        <ul class="text-[14px] leading-6 list-disc pl-5 space-y-1">
+          <li>Só o <b>nome do domínio</b> é analisado (ex.: <span class="font-mono">ads.exemplo.com</span>), nunca o endereço completo da página.</li>
+          <li>Com um serviço na nuvem (Anthropic, OpenAI…), esses nomes são enviados ao serviço escolhido e cobrados na sua conta. Com um servidor local (Ollama, LM Studio), <b>nada sai do computador</b>.</li>
+          <li>Domínios muito conhecidos e os da lista de permissões nunca são enviados.</li>
+          <li>Todo bloqueio feito pela IA pode ser desfeito aqui.</li>
+        </ul>
+        <div class="mt-5">${btn("Ativar análise por IA", "flip", "ai_enabled")}</div>
+      </div>
+    </div>`;
+  }
+  const provider = st.ai_provider === "openai_compat" ? "openai_compat" : "anthropic";
+  const field = "bg-field rounded-[10px] px-3 h-10 text-[14px] outline-none focus:ring-1 focus:ring-brand";
+  const keyBlock = a?.has_key
+    ? `<div class="flex items-center gap-3 text-[14px]"><span class="text-brand">${icon.check(18)}</span><span class="flex-1">Chave salva no Gerenciador de Credenciais do Windows</span>${btn("Remover chave", "ai-clear-key", "", "ghost")}</div>`
+    : `<form class="flex gap-2" data-submit="ai-save-key"><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="${provider === "anthropic" ? "sk-ant-…" : "Chave de API (opcional em servidor local)"}" class="flex-1 ${field}" />${btn("Salvar chave", "ai-save-key")}</form>`;
+  const where = a
+    ? a.remote
+      ? `<span class="text-attention">Os nomes de domínio novos são enviados para ${provider === "anthropic" ? "a Anthropic" : "esse servidor"}.</span>`
+      : `<span class="text-brand">Servidor neste computador: nada sai do PC.</span>`
+    : "";
+  const service = `
+    <div class="rounded-[10px] border border-line p-4 space-y-4">
+      <div class="grid grid-cols-[140px_1fr] items-center gap-3 text-[14px]">
+        <label>Serviço</label>
+        <select data-change="ai-provider" class="${field}">
+          <option value="anthropic" ${provider === "anthropic" ? "selected" : ""}>Anthropic (Claude)</option>
+          <option value="openai_compat" ${provider === "openai_compat" ? "selected" : ""}>Compatível com OpenAI (OpenAI, OpenRouter, LM Studio, Ollama)</option>
+        </select>
+        ${provider === "openai_compat" ? `<label>Endereço</label><input data-change="ai-endpoint" value="${esc(st.ai_endpoint)}" placeholder="http://localhost:11434/v1" spellcheck="false" class="${field} font-mono text-[13px]" />` : ""}
+        <label>Modelo</label>
+        <input data-change="ai-model" list="ai-models" value="${esc(st.ai_model)}" spellcheck="false" class="${field} font-mono text-[13px]" />
+        <datalist id="ai-models">${AI_MODELS[provider].map((m) => `<option value="${m}"></option>`).join("")}</datalist>
+      </div>
+      ${keyBlock}
+      <div class="text-[13px]">${where}</div>
+    </div>`;
+  const status = a
+    ? `<div class="rounded-[10px] bg-card p-4 mt-5 flex items-center gap-6 flex-wrap">
+        <div><div class="num text-[22px] font-semibold">${fmtNum(a.queue)}</div><div class="label mt-0.5">Na fila</div></div>
+        <div><div class="num text-[22px] font-semibold">${fmtNum(a.analyzed)}</div><div class="label mt-0.5">Analisados</div></div>
+        <div><div class="num text-[22px] font-semibold text-brand">${fmtNum(a.blocked)}</div><div class="label mt-0.5">Bloqueados</div></div>
+        <div><div class="num text-[22px] font-semibold text-attention">${fmtNum(a.review)}</div><div class="label mt-0.5">Para revisar</div></div>
+        <div class="flex-1 min-w-[180px] text-[13px] text-muted">
+          ${a.running ? "Analisando um lote…" : `Última análise: ${fmtDate(a.last_run)}`}
+          ${a.problem ? `<div class="text-attention mt-1">${esc(a.problem)}</div>` : ""}
+          ${a.last_error ? `<div class="text-danger mt-1">${esc(a.last_error)}</div>` : ""}
+        </div>
+        ${a.queue > 0 && !a.problem ? btn("Analisar agora", "ai-run") : ""}
+      </div>`
+    : "";
+  const group = (title: string, list: AiItem[], empty: string) =>
+    `<h2 class="label mt-7 mb-2.5">${title}</h2><div class="rounded-[10px] border border-line overflow-hidden">${
+      list.length ? list.map(aiRow).join("") : `<div class="px-4 py-4 text-[13px] text-muted">${empty}</div>`
+    }</div>`;
+  const items = a?.items ?? [];
+  return `<div class="px-8 pt-10 pb-8">
+    ${head}
+    ${master("Análise por IA", "ai_enabled", st.ai_enabled)}
+    ${service}
+    <div class="rounded-[10px] border border-line overflow-hidden mt-5">
+      ${row({ title: "Bloquear automaticamente vereditos fortes", desc: "Anúncios, rastreadores e ameaças com confiança de 85% ou mais. O resto vai para a revisão.", toggle: "flip", arg: "ai_auto_block", on: st.ai_auto_block })}
+    </div>
+    ${status}
+    ${group("Para revisar", items.filter((i) => i.status === "review"), "Nada para revisar.")}
+    ${group("Bloqueados pela IA", items.filter((i) => i.status === "blocked"), "Nenhum domínio bloqueado pela IA ainda.")}
+    ${items.some((i) => i.status === "allowed") ? group("Liberados por você", items.filter((i) => i.status === "allowed"), "") : ""}
+    <div class="mt-6">${btn("Esquecer todas as análises", "ai-forget", "", "ghost")}</div>
   </div>`;
 }

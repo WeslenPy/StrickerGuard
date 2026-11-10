@@ -33,6 +33,7 @@ export const icon = {
   filter: (s = 24) => svg(`<path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/>`, s),
   log: (s = 24) => svg(`<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/>`, s),
   window: (s = 24) => svg(`<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 8.5h17"/>`, s),
+  ai: (s = 24) => svg(`<path d="M12 3.5 13.9 9 19.5 10.9 13.9 12.8 12 18.5 10.1 12.8 4.5 10.9 10.1 9z"/><path d="M18.5 3.5v3M17 5h3M5.5 16.5v3M4 18h3"/>`, s),
   plus: (s = 20) => svg(`<path d="M12 5v14M5 12h14"/>`, s),
   trash: (s = 20) => svg(`<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>`, s),
   // window caption

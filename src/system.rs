@@ -234,3 +234,74 @@ pub fn relaunch_as_admin() -> Result<(), String> {
 pub fn open_url(url: &str) {
     let _ = hidden(Command::new("cmd").args(["/C", "start", "", url])).spawn();
 }
+
+// ---------- API key for the AI review (Windows Credential Manager) ----------
+
+/// Where a provider's key lives in Credential Manager ("Credenciais do Windows").
+fn key_target(provider: &str) -> String {
+    format!("StrickerGuard/ai-key/{provider}")
+}
+
+/// Saves the key encrypted by Windows for this user (never in settings.json).
+#[cfg(windows)]
+pub fn api_key_save(provider: &str, key: &str) -> Result<(), String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Security::Credentials::{CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC};
+    let mut target: Vec<u16> = key_target(provider).encode_utf16().chain(std::iter::once(0)).collect();
+    let mut blob = key.as_bytes().to_vec();
+    let cred = CREDENTIALW {
+        Type: CRED_TYPE_GENERIC,
+        TargetName: PWSTR(target.as_mut_ptr()),
+        CredentialBlobSize: blob.len() as u32,
+        CredentialBlob: blob.as_mut_ptr(),
+        Persist: CRED_PERSIST_LOCAL_MACHINE,
+        ..Default::default()
+    };
+    unsafe { CredWriteW(&cred, 0) }.map_err(|e| format!("não foi possível guardar a chave: {e}"))
+}
+
+#[cfg(windows)]
+pub fn api_key_load(provider: &str) -> Option<String> {
+    use windows::core::HSTRING;
+    use windows::Win32::Security::Credentials::{CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC};
+    let mut ptr: *mut CREDENTIALW = std::ptr::null_mut();
+    unsafe {
+        CredReadW(&HSTRING::from(key_target(provider)), CRED_TYPE_GENERIC, None, &mut ptr).ok()?;
+        let c = &*ptr;
+        let bytes = std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize).to_vec();
+        CredFree(ptr as *const _);
+        String::from_utf8(bytes).ok().filter(|k| !k.is_empty())
+    }
+}
+
+#[cfg(windows)]
+pub fn api_key_delete(provider: &str) {
+    use windows::core::HSTRING;
+    use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+    let _ = unsafe { CredDeleteW(&HSTRING::from(key_target(provider)), CRED_TYPE_GENERIC, None) };
+}
+
+#[cfg(not(windows))]
+pub fn api_key_save(_provider: &str, _key: &str) -> Result<(), String> {
+    Err("disponível só no Windows".into())
+}
+#[cfg(not(windows))]
+pub fn api_key_load(_provider: &str) -> Option<String> {
+    None
+}
+#[cfg(not(windows))]
+pub fn api_key_delete(_provider: &str) {}
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    fn api_key_round_trip() {
+        let p = "selftest";
+        super::api_key_delete(p);
+        assert_eq!(super::api_key_load(p), None);
+        super::api_key_save(p, "sk-test-123").unwrap();
+        assert_eq!(super::api_key_load(p).as_deref(), Some("sk-test-123"));
+        super::api_key_delete(p);
+        assert_eq!(super::api_key_load(p), None);
+    }
+}

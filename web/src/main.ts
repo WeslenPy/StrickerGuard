@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, type BoolKey, type Settings, type View } from "./api";
+import { api, type AiView, type BoolKey, type Settings, type View } from "./api";
 import { icon } from "./icons";
 import * as P from "./pages";
 import type { Ui } from "./pages";
@@ -20,6 +20,7 @@ const ui: Ui = {
   verdict: null,
   transition: "",
   dnsTest: {},
+  ai: null,
   dismissedMsg: (() => {
     try {
       return localStorage.getItem("dismissed-msg") ?? "";
@@ -121,6 +122,7 @@ function page() {
     case "protection/user-rules": return P.rulesEditor(ui, "user_rules");
     case "protection/allowlist": return P.rulesEditor(ui, "allowlist");
     case "protection/parental": return P.parental(ui);
+    case "protection/ai": return P.aiReview(ui);
     case "protection/parental-list": return P.rulesEditor(ui, "parental_blocklist");
     case "stats": return P.statistics(ui);
     case "apps": return P.apps(ui);
@@ -210,6 +212,17 @@ async function go(route: string) {
   document.getElementById("content")?.scrollTo(0, 0);
   if (route === "stats") await loadStats();
   if (route === "settings/log") await loadLog();
+  if (route === "protection/ai") await loadAi();
+}
+
+async function loadAi() {
+  ui.ai = await api.aiState();
+  if (ui.route === "protection/ai") render();
+}
+
+async function aiAct(p: Promise<AiView>) {
+  ui.ai = await p;
+  render();
 }
 
 // ---------- actions ----------
@@ -316,6 +329,22 @@ const actions: Record<string, (arg: string, el: HTMLElement) => unknown> = {
     toast(`Regra criada: @@||${host}^`);
   },
   "refresh-log": () => loadLog(),
+  "ai-save-key": async () => {
+    const input = document.getElementById("ai-key") as HTMLInputElement | null;
+    const key = input?.value.trim() ?? "";
+    if (!key) return toast("Cole a chave de API");
+    await aiAct(api.aiSetKey(key));
+    toast("Chave salva no Gerenciador de Credenciais do Windows");
+  },
+  "ai-clear-key": () => aiAct(api.aiClearKey()),
+  "ai-block": (d) => aiAct(api.aiDecide(d, "block")),
+  "ai-allow": (d) => aiAct(api.aiDecide(d, "allow")),
+  "ai-undo": (d) => aiAct(api.aiDecide(d, "undo")),
+  "ai-run": () => aiAct(api.aiRunNow()),
+  "ai-forget": async () => {
+    if (!confirm("Esquecer todas as análises? Os domínios bloqueados pela IA serão liberados.")) return;
+    await aiAct(api.aiForget());
+  },
   "exit-keep": () => api.quit(true),
   "exit-stop": () => api.quit(false),
   "exit-cancel": () => {
@@ -363,6 +392,15 @@ document.addEventListener("change", (ev) => {
     case "update-period": patch({ filters_update_hours: Number(el.value) }); break;
     case "log-only": ui.logOnly = el.value; loadLog(); break;
     case "custom-v4": patch({ custom_block_ipv4: el.value.trim() }); break;
+    case "ai-provider": {
+      // keep the model in the family of the chosen service
+      const claude = ui.view.settings.ai_model.startsWith("claude-");
+      const model = el.value === "anthropic" ? (claude ? ui.view.settings.ai_model : "claude-opus-5-5") : claude ? "llama3.1" : ui.view.settings.ai_model;
+      patch({ ai_provider: el.value, ai_model: model }).then(loadAi);
+      break;
+    }
+    case "ai-model": patch({ ai_model: el.value.trim() }).then(loadAi); break;
+    case "ai-endpoint": patch({ ai_endpoint: el.value.trim() }).then(loadAi); break;
     case "custom-v6": patch({ custom_block_ipv6: el.value.trim() }); break;
   }
 });
@@ -407,6 +445,9 @@ async function start() {
   listen("log-changed", () => {
     if (ui.route === "stats") loadStats();
     if (ui.route === "settings/log") loadLog();
+  });
+  listen("ai-changed", () => {
+    if (ui.route === "protection/ai") loadAi();
   });
   listen<string>("navigate", (e) => go(e.payload));
   listen<string>("toast", (e) => toast(e.payload));

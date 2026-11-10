@@ -12,6 +12,11 @@ export interface Settings {
   basic_protection: boolean;
   block_search_ads: boolean;
   block_streaming_ads: boolean;
+  ai_enabled: boolean;
+  ai_auto_block: boolean;
+  ai_provider: string;
+  ai_model: string;
+  ai_endpoint: string;
   language_specific: boolean;
   language_auto: boolean;
   user_rules_enabled: boolean;
@@ -134,6 +139,32 @@ export interface Stats {
   apps: [string, number, number][];
 }
 
+export type AiStatus = "blocked" | "review" | "allowed" | "benign";
+
+export interface AiItem {
+  domain: string;
+  verdict: string;
+  confidence: number;
+  reason: string;
+  at: number;
+  status: AiStatus;
+  by_user: boolean;
+}
+
+export interface AiView {
+  has_key: boolean;
+  problem: string | null;
+  remote: boolean;
+  running: boolean;
+  queue: number;
+  analyzed: number;
+  last_run: number | null;
+  last_error: string | null;
+  blocked: number;
+  review: number;
+  items: AiItem[];
+}
+
 export const api = {
   state: () => invoke<View>("get_state"),
   update: (patch: Partial<Settings>) => invoke<View>("update_settings", { patch }),
@@ -148,4 +179,10 @@ export const api = {
   testDns: (id: string) => invoke<[string, number | null][]>("test_dns", { id }),
   open: (url: string) => invoke<void>("open_link", { url }),
   quit: (keepFiltering: boolean) => invoke<void>("quit_app", { keepFiltering }),
+  aiState: () => invoke<AiView>("ai_state"),
+  aiSetKey: (key: string) => invoke<AiView>("ai_set_key", { key }),
+  aiClearKey: () => invoke<AiView>("ai_clear_key"),
+  aiDecide: (domain: string, action: "block" | "allow" | "undo") => invoke<AiView>("ai_decide", { domain, action }),
+  aiRunNow: () => invoke<AiView>("ai_run_now"),
+  aiForget: () => invoke<AiView>("ai_forget"),
 };
