@@ -3,6 +3,7 @@
 mod catalog;
 mod engine;
 mod state;
+mod streaming;
 mod system;
 mod tray;
 

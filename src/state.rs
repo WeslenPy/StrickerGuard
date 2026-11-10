@@ -16,6 +16,8 @@ pub struct Settings {
     pub ad_blocking: bool,
     pub basic_protection: bool,
     pub block_search_ads: bool,
+    /// built-in list against ads on streaming platforms (src/streaming.rs)
+    pub block_streaming_ads: bool,
     pub language_specific: bool,
     pub language_auto: bool,
     pub user_rules_enabled: bool,
@@ -83,6 +85,7 @@ impl Default for Settings {
             ad_blocking: true,
             basic_protection: true,
             block_search_ads: true,
+            block_streaming_ads: true,
             language_specific: true,
             language_auto: true,
             user_rules_enabled: true,
@@ -175,7 +178,7 @@ impl Settings {
         for k in &self.extra_filters {
             if let Some(f) = catalog::find(k) {
                 let section_on = match f.category {
-                    Category::Ads | Category::Other => self.ad_blocking,
+                    Category::Ads | Category::Streaming | Category::Other => self.ad_blocking,
                     Category::Trackers => self.tracking_protection,
                     Category::Annoyances => self.annoyance_blocking,
                     Category::Security => self.browsing_security || (f.kind == Kind::Dns && self.dns_protection),
@@ -322,6 +325,12 @@ pub fn build_engine(store: &Store, s: &Settings) -> Engine {
         }
     }
     if s.protection_enabled {
+        if s.ad_blocking && s.block_streaming_ads {
+            let o = Origin { source: Arc::from(crate::streaming::SOURCE), category: Category::Streaming };
+            for r in crate::streaming::rules() {
+                e.add_rule(&r, &o, true);
+            }
+        }
         if s.ad_blocking && s.user_rules_enabled {
             let o = Origin { source: Arc::from("Regras de usuário"), category: Category::User };
             for r in &s.user_rules {

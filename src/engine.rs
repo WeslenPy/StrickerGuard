@@ -19,6 +19,8 @@ pub enum Category {
     Dns,
     User,
     Parental,
+    /// built-in list against ads on streaming platforms (src/streaming.rs)
+    Streaming,
     Other,
 }
 
@@ -182,7 +184,8 @@ const UNSUPPORTED_OPTIONS: &[&str] = &[
 /// Lower comes first when the hosts file has to be trimmed.
 fn hosts_priority(c: Category) -> u8 {
     match c {
-        Category::User | Category::Parental => 0,
+        // small hand-picked lists first, so the hosts limit never cuts them
+        Category::User | Category::Parental | Category::Streaming => 0,
         Category::Ads | Category::Trackers | Category::Annoyances | Category::Other => 1,
         Category::Security => 2,
         Category::Dns => 3,
@@ -676,6 +679,29 @@ mod tests {
 
     fn origin() -> Origin {
         Origin { source: Arc::from("teste"), category: Category::Ads }
+    }
+
+    #[test]
+    fn streaming_list_survives_hosts_limit() {
+        let mut e = Engine::new();
+        // a big ordinary list whose names sort before the streaming ones
+        for i in 0..500 {
+            e.add_rule(&format!("||a{i:03}.example^"), &origin(), true);
+        }
+        let o = Origin { source: Arc::from(crate::streaming::SOURCE), category: Category::Streaming };
+        let rules: Vec<String> = crate::streaming::rules().collect();
+        for r in &rules {
+            e.add_rule(r, &o, true);
+        }
+        e.finish();
+        let hosts: Vec<String> = e.hosts_entries(rules.len()).into_iter().map(|(h, _)| h).collect();
+        assert_eq!(hosts.len(), rules.len());
+        for r in &rules {
+            let h = r.trim_start_matches("||").trim_end_matches('^');
+            assert!(hosts.iter().any(|x| x == h), "{h} was cut by the hosts limit");
+        }
+        assert_eq!(e.check("https://pubads.g.doubleclick.net/gampad/ads?iu=x").action, Action::Blocked);
+        assert_ne!(e.check("https://rr1---sn-abc.googlevideo.com/videoplayback").action, Action::Blocked);
     }
 
     #[test]

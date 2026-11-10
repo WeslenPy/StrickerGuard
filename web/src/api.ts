@@ -11,6 +11,7 @@ export interface Settings {
   ad_blocking: boolean;
   basic_protection: boolean;
   block_search_ads: boolean;
+  block_streaming_ads: boolean;
   language_specific: boolean;
   language_auto: boolean;
   user_rules_enabled: boolean;

@@ -16,6 +16,10 @@ bloqueio no Windows inteiro pelo arquivo `hosts` e pela troca do servidor DNS.
 
 ## Recursos
 
+- **Anúncios em plataformas de streaming**: lista própria com os servidores de anúncio em vídeo e
+  áudio (Google IMA/DoubleClick, Amazon, Spotify, Hulu, FreeWheel, SpotX…), com prioridade no
+  arquivo `hosts`. Anúncios inseridos no mesmo fluxo do vídeo (comum no YouTube e na Twitch) não
+  podem ser bloqueados por nome de servidor.
 - **Bloqueio de anúncios**, **proteção contra rastreamento**, **bloqueio de aborrecimentos**
   (avisos de cookies, pop-ups, widgets) e **segurança da navegação** (phishing e malware).
 - **Proteção de DNS**: escolha de servidor DNS (com teste de latência) e regras de DNS próprias.

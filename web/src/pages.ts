@@ -144,10 +144,22 @@ const section = (title: string, rows: string) =>
 const countActive = (u: Ui, groups: string[], core: string[]) =>
   u.view.filters.filter((f) => groups.includes(f.group) && f.active && !core.includes(f.key)).length;
 
+/** What the streaming list can and cannot do, plus the setting that widens it. */
+function streamingNote(u: Ui) {
+  const st = s(u);
+  const dnsBlocks = st.dns_protection && (st.dns_server === "block" || st.dns_server === "family");
+  return `<div class="mt-5 rounded-[10px] bg-card px-4 py-3.5 text-[13px] leading-5 text-muted">
+    <div class="label mb-1.5">Sobre anúncios em streaming</div>
+    Alguns serviços (YouTube, Twitch, Prime Video, Disney+) às vezes inserem o anúncio no mesmo fluxo do vídeo, vindo do mesmo servidor. Esses anúncios não podem ser bloqueados pelo Windows sem derrubar o vídeo; para eles, use uma extensão de bloqueio no navegador.
+    ${dnsBlocks ? "" : `<div class="mt-2">Para cobrir também servidores de anúncio com nomes variáveis, use o <a class="text-brand underline cursor-pointer" data-act="go" data-arg="protection/dns-servers">DNS com bloqueio de anúncios</a>.</div>`}
+    <div class="mt-2">Se algum player parar de funcionar, desligue esta opção ou libere o servidor de anúncios dele (por exemplo <span class="font-mono">imasdk.googleapis.com</span>) na <a class="text-brand underline cursor-pointer" data-act="go" data-arg="protection/allowlist">lista de permissões</a>.</div>
+  </div>`;
+}
+
 export function adBlocking(u: Ui) {
   const st = s(u);
   const off = !st.ad_blocking;
-  const warn = st.ad_blocking && !st.basic_protection && !st.block_search_ads && !st.language_specific && !st.user_rules_enabled;
+  const warn = st.ad_blocking && !st.basic_protection && !st.block_search_ads && !st.block_streaming_ads && !st.language_specific && !st.user_rules_enabled;
   return `<div class="px-8 pt-10 pb-8">
     ${pageHead("Bloqueio de anúncios", "Bloqueia anúncios indesejados, como pop-ups, banners, anúncios em vídeo e anúncios do Windows", "protection")}
     ${master("Bloqueio de anúncios", "ad_blocking", st.ad_blocking)}
@@ -155,10 +167,12 @@ export function adBlocking(u: Ui) {
     <div class="rounded-[10px] border border-line overflow-hidden">
       ${row({ title: "Proteção básica", desc: st.basic_protection ? "Remove a maioria dos anúncios de sites" : `<span class="text-danger">Sem a proteção básica, a maioria dos anúncios não será bloqueada</span>`, toggle: "flip", arg: "basic_protection", on: st.basic_protection, disabled: off })}
       ${row({ title: "Bloquear anúncios de pesquisa e autopromoção", desc: "Bloqueia anúncios nos resultados de pesquisa e autopromoção de sites", toggle: "flip", arg: "block_search_ads", on: st.block_search_ads, disabled: off })}
+      ${row({ title: "Anúncios em plataformas de streaming", desc: "Servidores de anúncios em vídeo e áudio: YouTube, Twitch, Spotify, Globoplay, Crunchyroll, Hulu, Pluto TV e players que usam Google IMA ou FreeWheel", toggle: "flip", arg: "block_streaming_ads", on: st.block_streaming_ads, disabled: off })}
       ${row({ title: "Bloqueio de anúncios específicos do idioma", desc: "Bloqueia anúncios em sites em português e espanhol", toggle: "flip", arg: "language_specific", on: st.language_specific, disabled: off })}
       ${row({ title: "Regras de usuário", desc: `Regras adicionadas manualmente e pelo registro de filtragem · ${st.user_rules.filter((r) => r.trim() && !r.startsWith("!")).length} regras`, toggle: "flip", arg: "user_rules_enabled", on: st.user_rules_enabled, open: "protection/user-rules", disabled: off })}
       ${row({ title: "Outros filtros de bloqueio de anúncios", desc: `Ativados em Filtros: ${countActive(u, ["Bloqueio de anúncios", "Idiomas", "Outros"], ["s2", "s9", "s10"])}`, open: "settings/filters" })}
     </div>
+    ${st.block_streaming_ads && !off ? streamingNote(u) : ""}
   </div>`;
 }
 
