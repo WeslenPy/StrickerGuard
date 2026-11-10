@@ -2,7 +2,6 @@
 
 mod catalog;
 mod engine;
-mod shot;
 mod state;
 mod system;
 mod tray;
@@ -12,7 +11,6 @@ use serde::Serialize;
 use serde_json::Value;
 use state::{FilterMeta, LogEntry, Settings, Store};
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -28,8 +26,6 @@ struct Core {
     updating: AtomicBool,
     system_msg: Mutex<Option<String>>,
     applied_dns: Mutex<Option<String>>,
-    screenshot: Option<PathBuf>,
-    start_route: String,
     seen_dns: Mutex<HashMap<String, i64>>,
     pause_gen: AtomicU64,
 }
@@ -64,8 +60,6 @@ struct View {
     busy: bool,
     updating: bool,
     system_msg: Option<String>,
-    screenshot: bool,
-    start_route: String,
     version: &'static str,
     data_dir: String,
 }
@@ -94,20 +88,17 @@ fn view(core: &Core) -> View {
             }
         })
         .collect();
-    let screenshot = core.screenshot.is_some();
     View {
         settings,
         filters,
         dns_servers: catalog::DNS_SERVERS,
         engine: core.engine.read().unwrap().stats.clone(),
-        admin: if screenshot { false } else { system::is_admin() },
-        hosts_count: if screenshot { 0 } else { system::hosts_count() },
-        run_on_startup: if screenshot { false } else { system::run_on_startup() },
+        admin: system::is_admin(),
+        hosts_count: system::hosts_count(),
+        run_on_startup: system::run_on_startup(),
         busy: core.busy.load(Ordering::SeqCst),
         updating: core.updating.load(Ordering::SeqCst),
         system_msg: core.system_msg.lock().unwrap().clone(),
-        screenshot,
-        start_route: core.start_route.clone(),
         version: env!("CARGO_PKG_VERSION"),
         data_dir: core.store.dir.display().to_string(),
     }
@@ -126,9 +117,7 @@ fn rebuild(app: &AppHandle, core: &Shared) {
             return; // a newer rebuild is running
         }
         *core.engine.write().unwrap() = eng;
-        if core.screenshot.is_none() {
-            apply_system(&core, &settings);
-        }
+        apply_system(&core, &settings);
         core.busy.store(false, Ordering::SeqCst);
         let _ = app.emit("state-changed", ());
     });
@@ -198,7 +187,7 @@ fn update_settings(app: AppHandle, core: State<Shared>, patch: Value) -> Result<
         needs_download = s.active_filters().into_iter().any(|k| !core.store.filter_path(k).exists());
     }
     rebuild(&app, &core);
-    if needs_download && core.screenshot.is_none() {
+    if needs_download {
         start_update(&app, &core, false);
     }
     Ok(view(&core))
@@ -399,13 +388,6 @@ fn open_link(url: String) {
     }
 }
 
-#[tauri::command]
-fn screenshot_ready(app: AppHandle, core: State<Shared>) {
-    if let Some(out) = core.screenshot.clone() {
-        shot::capture_and_exit(app, out);
-    }
-}
-
 /// Every 30 s, reads the names Windows has just resolved and runs them through the rules,
 /// so the statistics show real traffic from this computer.
 fn dns_monitor(app: AppHandle, core: Shared) {
@@ -545,55 +527,34 @@ fn quit_app(app: AppHandle, keep_filtering: bool) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    // started with Windows: stay in the tray
-    let minimized = args.iter().any(|a| a == "--minimized");
-    // `--route protection/ads` opens a given screen first (handy with --screenshot)
-    let start_route = args.iter().position(|a| a == "--route").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
-    let screenshot = args.iter().position(|a| a == "--screenshot").and_then(|i| args.get(i + 1)).map(|p| {
-        let p = PathBuf::from(p);
-        if p.is_absolute() { p } else { std::env::current_dir().unwrap_or_default().join(p) }
-    });
-
     // keep the Windows startup entry pointing at this exe (its path changes when the
     // installer renames the program folder, e.g. Escudo -> StrickerGuard)
-    if screenshot.is_none() && system::run_on_startup() {
+    if system::run_on_startup() {
         let _ = system::set_run_on_startup(true);
     }
 
     // Started as administrator (by "Abrir como admin" or by the user) while a copy
     // without those rights is still running: replace it. Otherwise the single-instance
     // check below would just bring the old, non-admin window forward and quit.
-    if screenshot.is_none() && system::is_admin() {
+    if system::is_admin() {
         system::close_other_instances();
     }
 
-    let mut builder = tauri::Builder::default();
-    if screenshot.is_none() {
+    tauri::Builder::default()
         // a second launch just brings the running window forward
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)));
-    }
-    let shot_mode = screenshot.is_some();
-    builder
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .on_window_event(move |window, event| {
             // closing the window keeps protection running in the tray, like the original
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if !shot_mode {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .setup(move |app| {
-            let dir = if screenshot.is_some() {
-                // a clean, throw-away profile so the picture always shows factory settings
-                std::env::temp_dir().join(format!("escudo-shot-{}", std::process::id()))
-            } else {
-                app.path().app_data_dir().unwrap_or_else(|_| state::data_dir_fallback())
-            };
+            let dir = app.path().app_data_dir().unwrap_or_else(|_| state::data_dir_fallback());
             let store = Store::new(dir);
             let settings = store.load_settings();
-            let log = if screenshot.is_some() { vec![] } else { store.load_log() };
+            let log = store.load_log();
             let meta = store.load_meta();
             let core: Shared = Arc::new(Core {
                 store,
@@ -606,40 +567,19 @@ fn main() {
                 updating: AtomicBool::new(false),
                 system_msg: Mutex::new(None),
                 applied_dns: Mutex::new(None),
-                screenshot: screenshot.clone(),
-                start_route: start_route.clone(),
                 seen_dns: Mutex::new(HashMap::new()),
                 pause_gen: AtomicU64::new(0),
             });
             app.manage(core.clone());
             let handle = app.handle().clone();
             rebuild(&handle, &core);
-            if screenshot.is_none() {
-                tray::create(&handle, settings.protection_enabled, on_tray)?;
-                if minimized {
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.hide();
-                    }
-                }
-                let missing =settings.active_filters().into_iter().any(|k| !core.store.filter_path(k).exists());
-                let stale = core.meta.lock().unwrap().values().filter_map(|m| m.updated).min().is_some_and(|t| chrono::Utc::now().timestamp() - t > 86_400);
-                if missing || (settings.auto_update && stale) {
-                    start_update(&handle, &core, stale);
-                }
-                dns_monitor(handle.clone(), core.clone());
-            } else {
-                // safety net: never hang if the page fails to report it is drawn
-                let h = handle.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(20));
-                    let core = h.state::<Shared>().inner().clone();
-                    if let Some(out) = core.screenshot.clone() {
-                        shot::capture_and_exit(h.clone(), out);
-                    }
-                    std::thread::sleep(std::time::Duration::from_secs(10));
-                    h.exit(6);
-                });
+            tray::create(&handle, settings.protection_enabled, on_tray)?;
+            let missing = settings.active_filters().into_iter().any(|k| !core.store.filter_path(k).exists());
+            let stale = core.meta.lock().unwrap().values().filter_map(|m| m.updated).min().is_some_and(|t| chrono::Utc::now().timestamp() - t > 86_400);
+            if missing || (settings.auto_update && stale) {
+                start_update(&handle, &core, stale);
             }
+            dns_monitor(handle.clone(), core.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -655,8 +595,7 @@ fn main() {
             relaunch_admin,
             test_dns,
             open_link,
-            quit_app,
-            screenshot_ready
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o app");

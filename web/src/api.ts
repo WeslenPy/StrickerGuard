@@ -98,8 +98,6 @@ export interface View {
   busy: boolean;
   updating: boolean;
   system_msg: string | null;
-  screenshot: boolean;
-  start_route: string;
   version: string;
   data_dir: string;
 }
@@ -149,5 +147,4 @@ export const api = {
   testDns: (id: string) => invoke<[string, number | null][]>("test_dns", { id }),
   open: (url: string) => invoke<void>("open_link", { url }),
   quit: (keepFiltering: boolean) => invoke<void>("quit_app", { keepFiltering }),
-  screenshotReady: () => invoke<void>("screenshot_ready"),
 };

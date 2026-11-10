@@ -73,16 +73,6 @@ cargo test
 O frontend é empacotado no binário, então rode `npm run build` antes de `cargo build`/`cargo run`
 sempre que mudar algo em `web/`.
 
-### Opções de linha de comando
-
-| Opção | Efeito |
-| --- | --- |
-| `--minimized` | Inicia só na bandeja (usado ao iniciar com o Windows). |
-| `--route <tela>` | Abre direto numa tela, ex.: `protection/ads`, `stats`, `settings/log`. |
-| `--screenshot <arquivo.png>` | Desenha a janela, salva um PNG e fecha. Usa uma pasta de dados temporária e não mexe no sistema. |
-
-Exemplo: `target\release\escudo.exe --route stats --screenshot stats.png`
-
 ## Gerar o instalador (MSI)
 
 ```powershell
@@ -105,7 +95,6 @@ src/                 backend Rust
   state.rs           configurações, registro de filtragem, listas ativas
   system.rs          hosts, DNS, iniciar com o Windows, checagem de admin
   tray.rs            ícone e menu da bandeja
-  shot.rs            captura de tela (--screenshot)
 web/                 interface
   index.html
   src/main.ts        shell (barra lateral, título, rotas, ações)

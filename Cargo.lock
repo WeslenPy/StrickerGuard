@@ -911,7 +911,6 @@ dependencies = [
  "tauri-plugin-single-instance",
  "ureq",
  "url",
- "webview2-com",
  "windows",
 ]
 

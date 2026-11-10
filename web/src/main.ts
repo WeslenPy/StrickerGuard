@@ -320,7 +320,6 @@ document.addEventListener("input", (ev) => {
 
 async function start() {
   await refresh();
-  if (ui.view.start_route) await go(ui.view.start_route);
   listen("state-changed", async () => {
     const editing = document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "INPUT";
     ui.view = await api.state();
@@ -337,13 +336,6 @@ async function start() {
     render();
   });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => applyTheme());
-
-  if (ui.view.screenshot) {
-    // draw about 120 frames, then let the app save its picture
-    let frames = 0;
-    const tick = () => (++frames >= 120 ? api.screenshotReady() : requestAnimationFrame(tick));
-    requestAnimationFrame(tick);
-  }
 }
 
 start();

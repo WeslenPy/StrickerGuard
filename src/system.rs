@@ -213,7 +213,7 @@ pub fn set_run_on_startup(on: bool) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut cmd = Command::new("reg");
     if on {
-        cmd.args(["add", RUN_KEY, "/v", "Escudo", "/t", "REG_SZ", "/d", &format!("\"{}\" --minimized", exe.display()), "/f"]);
+        cmd.args(["add", RUN_KEY, "/v", "Escudo", "/t", "REG_SZ", "/d", &format!("\"{}\"", exe.display()), "/f"]);
     } else {
         cmd.args(["delete", RUN_KEY, "/v", "Escudo", "/f"]);
     }
