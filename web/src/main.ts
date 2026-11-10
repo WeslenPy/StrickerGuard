@@ -30,8 +30,8 @@ function exitDialog() {
   if (!askExit) return "";
   return `<div class="absolute inset-0 z-40 bg-black/60 flex items-center justify-center">
     <div class="bg-card border border-line rounded-2xl w-[460px] p-6 shadow-[var(--shadow)]">
-      <div class="label !text-attention mb-2">Atenção</div><div class="text-[20px] font-semibold mb-2" style="font-family:var(--font-display)">Fechar o Escudo?</div>
-      <p class="text-[14px] text-muted mb-5">Você vai fechar o Escudo. O bloqueio aplicado no Windows pode continuar funcionando depois de fechar.</p>
+      <div class="label !text-attention mb-2">Atenção</div><div class="text-[20px] font-semibold mb-2" style="font-family:var(--font-display)">Fechar o StrickerGuard?</div>
+      <p class="text-[14px] text-muted mb-5">Você vai fechar o StrickerGuard. O bloqueio aplicado no Windows pode continuar funcionando depois de fechar.</p>
       <div class="flex flex-col gap-2">
         <button class="bg-accent hover:bg-accent-hover active:bg-accent-pressed text-on-accent rounded-full h-10 text-[14px] font-semibold" data-act="exit-keep">Fechar, mas continuar filtrando</button>
         <button class="border border-line hover:bg-card-hover rounded-full h-10 text-[14px]" data-act="exit-stop">Sair e parar a proteção</button>
@@ -62,7 +62,7 @@ function sidebar() {
     </button>`;
   };
   return `<nav class="h-full ${wide ? "w-[220px]" : "w-[56px]"} shrink-0 border-r border-sideline flex flex-col bg-page" data-tauri-drag-region>
-    <div class="h-[72px] flex items-center ${wide ? "px-4 gap-3" : "justify-center"}" data-tauri-drag-region>${icon.logo(28)}${wide ? `<span class="text-[17px] font-bold tracking-[-0.02em]" style="font-family:var(--font-display)">escudo<span class="text-brand">.</span></span>` : ""}</div>
+    <div class="h-[72px] flex items-center ${wide ? "px-4 gap-3" : "justify-center"}" data-tauri-drag-region>${icon.logo(28)}${wide ? `<span class="text-[17px] font-bold tracking-[-0.02em]" style="font-family:var(--font-display)">stricker<span class="text-brand">guard</span></span>` : ""}</div>
     ${nav.map(([r, l, ic]) => item(r, l, ic())).join("")}
     ${item("updates", ui.view.updating ? "Atualizando filtros…" : "Verificar atualizações", `<span class="${ui.view.updating ? "spin inline-block" : ""}">${icon.refresh()}</span>`, "update-filters")}
     <div class="flex-1" data-tauri-drag-region></div>

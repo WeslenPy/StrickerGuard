@@ -56,7 +56,7 @@ pub fn create(app: &AppHandle, protection_on: bool, on_action: impl Fn(&AppHandl
     let menu = Menu::with_items(
         app,
         &[
-            &item("open", "Abrir Escudo")?,
+            &item("open", "Abrir StrickerGuard")?,
             &PredefinedMenuItem::separator(app)?,
             &toggle,
             &item("pause", "Desativar proteção por 30 segundos")?,
@@ -67,7 +67,7 @@ pub fn create(app: &AppHandle, protection_on: bool, on_action: impl Fn(&AppHandl
             &advanced,
             &item("go:settings/about", "Sobre...")?,
             &PredefinedMenuItem::separator(app)?,
-            &item("exit", "Sair do Escudo")?,
+            &item("exit", "Sair do StrickerGuard")?,
         ],
     )?;
 
@@ -108,7 +108,7 @@ fn icon(on: bool) -> tauri::Result<Image<'static>> {
 }
 
 fn tooltip(on: bool) -> &'static str {
-    if on { "Escudo — proteção ativada" } else { "Escudo — proteção desativada" }
+    if on { "StrickerGuard — proteção ativada" } else { "StrickerGuard — proteção desativada" }
 }
 
 /// Keeps the tray icon, tooltip and menu text in step with the protection switch.

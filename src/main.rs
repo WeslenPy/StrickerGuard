@@ -555,6 +555,19 @@ fn main() {
         if p.is_absolute() { p } else { std::env::current_dir().unwrap_or_default().join(p) }
     });
 
+    // keep the Windows startup entry pointing at this exe (its path changes when the
+    // installer renames the program folder, e.g. Escudo -> StrickerGuard)
+    if screenshot.is_none() && system::run_on_startup() {
+        let _ = system::set_run_on_startup(true);
+    }
+
+    // Started as administrator (by "Abrir como admin" or by the user) while a copy
+    // without those rights is still running: replace it. Otherwise the single-instance
+    // check below would just bring the old, non-admin window forward and quit.
+    if screenshot.is_none() && system::is_admin() {
+        system::close_other_instances();
+    }
+
     let mut builder = tauri::Builder::default();
     if screenshot.is_none() {
         // a second launch just brings the running window forward

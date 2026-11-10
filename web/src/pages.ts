@@ -460,7 +460,7 @@ export function about(u: Ui) {
   const v = u.view;
   return `<div class="px-8 pt-10 pb-8">
     ${pageHead("Sobre", "", "settings")}
-    <div class="flex items-center gap-4 mb-6">${icon.logo(56)}<div><div class="text-[22px] font-semibold">Escudo</div><div class="text-muted text-[14px]">Versão ${esc(v.version)}</div></div></div>
+    <div class="flex items-center gap-4 mb-6">${icon.logo(56)}<div><div class="text-[22px] font-semibold">StrickerGuard</div><div class="text-muted text-[14px]">Versão ${esc(v.version)}</div></div></div>
     <p class="text-[14px] text-muted max-w-[600px]">Bloqueador de anúncios, rastreadores e sites perigosos. As listas de bloqueio são baixadas de filters.adtidy.org; as regras são verificadas no seu computador e nada é enviado para fora.</p>
     <div class="mt-6 text-[13px] text-muted">Pasta de dados: <span class="font-mono">${esc(v.data_dir)}</span></div>
   </div>`;

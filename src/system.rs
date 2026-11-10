@@ -1,7 +1,6 @@
 //! Changes made to Windows itself: hosts file, DNS servers, start with Windows.
 //! Everything here is opt-in from the app's settings.
 
-use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -24,9 +23,50 @@ fn hidden(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
-/// True when the app may write the hosts file (it runs as administrator).
+/// True when this process runs elevated (as administrator).
+/// Checks the process token, not the hosts file: the hosts file can be locked by
+/// Defender or another program even for an administrator.
 pub fn is_admin() -> bool {
-    OpenOptions::new().append(true).open(hosts_path()).is_ok()
+    #[cfg(windows)]
+    {
+        unsafe { windows::Win32::UI::Shell::IsUserAnAdmin().as_bool() }
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Ends other running copies of this program (same .exe name), then waits for them
+/// to go. Used by an elevated start so it replaces a copy that runs without
+/// administrator rights instead of handing over to it.
+pub fn close_other_instances() {
+    let Some(name) = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())) else {
+        return;
+    };
+    let me = std::process::id();
+    let others = || -> Vec<u32> {
+        let out = hidden(Command::new("tasklist").args(["/FI", &format!("IMAGENAME eq {name}"), "/FO", "CSV", "/NH"])).output();
+        let Ok(out) = out else { return vec![] };
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| l.split("\",\"").nth(1).and_then(|pid| pid.trim_matches('"').parse::<u32>().ok()))
+            .filter(|&pid| pid != me)
+            .collect()
+    };
+    let pids = others();
+    if pids.is_empty() {
+        return;
+    }
+    for pid in &pids {
+        let _ = hidden(Command::new("taskkill").args(["/F", "/PID", &pid.to_string()])).output();
+    }
+    for _ in 0..20 {
+        if others().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 }
 
 fn strip_block(text: &str) -> String {
@@ -87,7 +127,11 @@ pub fn write_hosts(entries: &[(String, Option<String>)], v4: &str, v6: &str) -> 
     }
     std::fs::write(&path, text).map_err(|e| {
         if e.kind() == std::io::ErrorKind::PermissionDenied {
-            "É preciso abrir o app como administrador para aplicar no sistema.".to_string()
+            if is_admin() {
+                "O arquivo hosts está bloqueado (somente leitura, Windows Defender ou antivírus). Libere a alteração do hosts e tente de novo.".to_string()
+            } else {
+                "É preciso abrir o app como administrador para aplicar no sistema.".to_string()
+            }
         } else {
             e.to_string()
         }
