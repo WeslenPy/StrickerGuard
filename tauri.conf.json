@@ -19,6 +19,7 @@
         "minHeight": 640,
         "resizable": true,
         "decorations": false,
+        "backgroundColor": "#0E1013",
         "center": true
       }
     ],

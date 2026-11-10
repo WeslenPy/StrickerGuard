@@ -137,6 +137,18 @@ function applyTheme() {
   let t = ui.view.settings.theme;
   if (t === "system") t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   document.documentElement.dataset.theme = t;
+  try {
+    localStorage.setItem("theme", t); // read by index.html so the splash opens in this theme
+  } catch {}
+}
+
+/** Fades out the splash screen from index.html once the first screen is drawn. */
+function hideSplash() {
+  const el = document.getElementById("splash");
+  if (!el || el.classList.contains("out")) return;
+  el.classList.add("out");
+  el.addEventListener("transitionend", () => el.remove(), { once: true });
+  window.setTimeout(() => el.remove(), 400); // in case the transition never runs
 }
 
 function render() {
@@ -371,7 +383,17 @@ document.addEventListener("input", (ev) => {
 // ---------- start ----------
 
 async function start() {
-  await refresh();
+  try {
+    await refresh();
+  } catch (e) {
+    // keep the splash, say what went wrong instead of an empty window
+    const el = document.getElementById("splash");
+    el?.querySelector(".bar")?.remove();
+    el?.insertAdjacentHTML("beforeend", `<div class="err">Não foi possível iniciar o StrickerGuard.<br>${esc(String(e))}</div>`);
+    return;
+  }
+  // wait one frame so the first screen is painted under the splash before it fades
+  requestAnimationFrame(() => requestAnimationFrame(hideSplash));
   listen("state-changed", async () => {
     const editing = document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "INPUT";
     ui.view = await api.state();

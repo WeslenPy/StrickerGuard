@@ -4,9 +4,156 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StrickerGuard</title>
+    <script>
+      // Last theme the app used (saved by main.ts): the splash starts in it, no flash.
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <!-- Splash styles are inline so they apply before the app's CSS and JS load. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0e1013;
+      }
+      html[data-theme="light"],
+      html[data-theme="light"] body {
+        background: #f4f5f1;
+      }
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        background: #0e1013;
+        color: #eceff3;
+        font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+        transition: opacity 0.22s ease-out;
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: default;
+      }
+      html[data-theme="light"] #splash {
+        background: #f4f5f1;
+        color: #14171b;
+      }
+      #splash.out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #splash .mark {
+        position: relative;
+        width: 112px;
+        height: 112px;
+        display: grid;
+        place-items: center;
+      }
+      #splash .mark::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        border: 1px solid #c5f04a;
+        opacity: 0;
+        animation: splash-ring 1.6s ease-out infinite;
+      }
+      #splash .mark svg {
+        filter: drop-shadow(0 0 22px rgba(197, 240, 74, 0.18));
+        animation: splash-in 0.4s ease-out both;
+      }
+      #splash .word {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        animation: splash-in 0.4s 0.08s ease-out both;
+      }
+      #splash .word span {
+        color: #c5f04a;
+      }
+      html[data-theme="light"] #splash .word span {
+        color: #4a7300;
+      }
+      #splash .bar {
+        width: 120px;
+        height: 2px;
+        border-radius: 2px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, 0.18);
+      }
+      #splash .bar::after {
+        content: "";
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: 2px;
+        background: #c5f04a;
+        animation: splash-bar 1.1s ease-in-out infinite;
+      }
+      #splash .err {
+        max-width: 420px;
+        text-align: center;
+        font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+        color: #ff6b5e;
+      }
+      @keyframes splash-ring {
+        0% {
+          transform: scale(0.7);
+          opacity: 0.55;
+        }
+        100% {
+          transform: scale(1.15);
+          opacity: 0;
+        }
+      }
+      @keyframes splash-in {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+      }
+      @keyframes splash-bar {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(250%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash *,
+        #splash *::before,
+        #splash *::after {
+          animation: none !important;
+        }
+      }
+    </style>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
+    <div id="splash" role="status" aria-label="Carregando o StrickerGuard" data-tauri-drag-region>
+      <div class="mark" data-tauri-drag-region>
+        <svg width="64" height="64" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 1.8 3.6 4.9v6.6c0 5 3.4 9 8.4 10.9 5-1.9 8.4-5.9 8.4-10.9V4.9z" fill="#C5F04A" />
+          <path
+            d="M15.4 8.6c-.6-.8-1.8-1.3-3.3-1.3-2 0-3.4 1-3.4 2.4 0 3.3 7 1.8 7 5 0 1.5-1.5 2.6-3.6 2.6-1.6 0-2.9-.6-3.6-1.6"
+            fill="none"
+            stroke="#12160A"
+            stroke-width="2.1"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </div>
+      <div class="word" data-tauri-drag-region>stricker<span>guard</span></div>
+      <div class="bar"></div>
+    </div>
     <div id="app" class="h-full"></div>
     <script type="module" src="./src/main.ts"></script>
   </body>
