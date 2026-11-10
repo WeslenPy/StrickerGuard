@@ -14,6 +14,8 @@ export interface Ui {
   verdict: Verdict | null;
   transition: "" | "enabling" | "disabling";
   dnsTest: Record<string, string>;
+  /** key of the system message the user closed (see msgKey) */
+  dismissedMsg: string;
 }
 
 const s = (u: Ui) => u.view.settings;
@@ -64,15 +66,28 @@ export function home(u: Ui) {
   </div>`;
 }
 
+/** The success message changes with the domain count, so all successes share one key;
+ *  each error keeps its own text, so a new error shows up even after closing an old one. */
+export const isSystemOk = (msg: string) => /domínios bloqueados no Windows/.test(msg);
+export const msgKey = (msg: string) => (isSystemOk(msg) ? "ok" : msg);
+
 function banner(u: Ui) {
   const st = s(u);
   const v = u.view;
-  if (st.banner_dismissed && !v.system_msg) return "";
   let title = "";
   let desc = "";
   let action = "";
   let label = "Ativar";
-  if (!st.apply_to_system) {
+  let ok = false;
+  // hosts file and DNS are being written in the background
+  const applying = st.apply_to_system && v.admin && v.busy && u.dismissedMsg !== "ok";
+  if (!st.apply_to_system || !v.admin) {
+    if (st.banner_dismissed) return "";
+  } else if (!applying && (!v.system_msg || msgKey(v.system_msg) === u.dismissedMsg)) return "";
+  if (applying) {
+    title = "Aplicando o bloqueio no Windows…";
+    desc = "Gravando o arquivo hosts e o DNS. Pode levar alguns segundos.";
+  } else if (!st.apply_to_system) {
     title = "Aplicar o bloqueio em todo o Windows?";
     desc = "Sem isso, os bloqueios valem só para as verificações feitas no app.";
     action = "enable-system";
@@ -82,13 +97,14 @@ function banner(u: Ui) {
     action = "relaunch-admin";
     label = "Abrir como admin";
   } else if (v.system_msg) {
-    title = "Bloqueio aplicado no Windows";
+    ok = isSystemOk(v.system_msg);
+    title = ok ? "Bloqueio aplicado no Windows" : "Não foi possível aplicar no Windows";
     desc = esc(v.system_msg);
     action = "";
   } else return "";
   return `
     <div class="absolute left-6 right-6 bottom-4 bg-card rounded-[10px] flex items-center gap-4 pl-4 pr-3 h-[72px]">
-      <div class="text-danger">${icon.alert(22)}</div>
+      <div class="${ok || applying ? "text-brand" : "text-danger"}">${applying ? `<span class="block w-[22px] h-[22px] border-2 border-current border-t-transparent rounded-full spin"></span>` : ok ? icon.check(22) : icon.alert(22)}</div>
       <div class="flex-1 min-w-0">
         <div class="text-[15px] leading-5">${title}</div>
         <div class="text-[13px] text-ink mt-1">${desc} <a class="text-brand underline cursor-pointer" data-act="go" data-arg="settings/app">Saiba mais</a></div>

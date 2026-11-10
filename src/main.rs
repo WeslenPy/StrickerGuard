@@ -359,15 +359,18 @@ fn clear_stats(core: State<Shared>) {
     core.store.save_log(&[]);
 }
 
+// The commands below run Windows tools (reg, PowerShell); they are async and do the work
+// on a worker thread so the window keeps drawing (and its loading spinners keep turning).
+
 #[tauri::command]
-fn set_startup(core: State<Shared>, on: bool) -> Result<View, String> {
-    system::set_run_on_startup(on)?;
+async fn set_startup(core: State<'_, Shared>, on: bool) -> Result<View, String> {
+    tauri::async_runtime::spawn_blocking(move || system::set_run_on_startup(on)).await.map_err(|e| e.to_string())??;
     Ok(view(&core))
 }
 
 #[tauri::command]
-fn relaunch_admin(app: AppHandle) -> Result<(), String> {
-    system::relaunch_as_admin()?;
+async fn relaunch_admin(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(system::relaunch_as_admin).await.map_err(|e| e.to_string())??;
     app.exit(0);
     Ok(())
 }
@@ -518,15 +521,21 @@ fn on_tray(app: &AppHandle, action: tray::TrayAction) {
 
 /// Leaves the app; `keep_filtering` leaves the Windows hosts entries in place.
 #[tauri::command]
-fn quit_app(app: AppHandle, keep_filtering: bool) {
+async fn quit_app(app: AppHandle, keep_filtering: bool) {
     if !keep_filtering && system::is_admin() {
-        let _ = system::write_hosts(&[], "", "");
-        let _ = system::set_dns(&[]);
+        let _ = tauri::async_runtime::spawn_blocking(|| {
+            let _ = system::write_hosts(&[], "", "");
+            let _ = system::set_dns(&[]);
+        })
+        .await;
     }
     app.exit(0);
 }
 
 fn main() {
+    // started with Windows: stay in the tray
+    let minimized = std::env::args().any(|a| a == "--minimized");
+
     // keep the Windows startup entry pointing at this exe (its path changes when the
     // installer renames the program folder, e.g. Escudo -> StrickerGuard)
     if system::run_on_startup() {
@@ -574,6 +583,11 @@ fn main() {
             let handle = app.handle().clone();
             rebuild(&handle, &core);
             tray::create(&handle, settings.protection_enabled, on_tray)?;
+            if minimized {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
             let missing = settings.active_filters().into_iter().any(|k| !core.store.filter_path(k).exists());
             let stale = core.meta.lock().unwrap().values().filter_map(|m| m.updated).min().is_some_and(|t| chrono::Utc::now().timestamp() - t > 86_400);
             if missing || (settings.auto_update && stale) {

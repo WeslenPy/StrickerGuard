@@ -20,7 +20,34 @@ const ui: Ui = {
   verdict: null,
   transition: "",
   dnsTest: {},
+  dismissedMsg: (() => {
+    try {
+      return localStorage.getItem("dismissed-msg") ?? "";
+    } catch {
+      return "";
+    }
+  })(),
 };
+// Actions still running, as "act\u0000arg". Their buttons show a spinner and ignore clicks;
+// re-applied after every render so a state update mid-action does not drop it.
+const pending = new Set<string>();
+const LOADING_DELAY = 150; // ms; quick actions finish before any spinner shows
+const keyOf = (act: string, arg: string) => `${act}\u0000${arg}`;
+
+function markPending() {
+  const exiting = [...pending].some((k) => k.startsWith("exit-"));
+  document.querySelectorAll<HTMLElement>("[data-act]").forEach((el) => {
+    const act = el.dataset.act!;
+    const loading = pending.has(keyOf(act, el.dataset.arg ?? ""));
+    // while leaving, the other choices of the exit dialog are locked too
+    const locked = loading || (exiting && act.startsWith("exit-"));
+    if (loading) el.dataset.loading = "true";
+    else delete el.dataset.loading;
+    el.toggleAttribute("aria-busy", loading);
+    if (el instanceof HTMLButtonElement && locked) el.disabled = true;
+  });
+}
+
 let toastText = "";
 let toastTimer = 0;
 // tray "Sair" while the hosts file still blocks: ask like the original's exit warning
@@ -33,8 +60,8 @@ function exitDialog() {
       <div class="label !text-attention mb-2">Atenção</div><div class="text-[20px] font-semibold mb-2" style="font-family:var(--font-display)">Fechar o StrickerGuard?</div>
       <p class="text-[14px] text-muted mb-5">Você vai fechar o StrickerGuard. O bloqueio aplicado no Windows pode continuar funcionando depois de fechar.</p>
       <div class="flex flex-col gap-2">
-        <button class="bg-accent hover:bg-accent-hover active:bg-accent-pressed text-on-accent rounded-full h-10 text-[14px] font-semibold" data-act="exit-keep">Fechar, mas continuar filtrando</button>
-        <button class="border border-line hover:bg-card-hover rounded-full h-10 text-[14px]" data-act="exit-stop">Sair e parar a proteção</button>
+        <button class="bg-accent hover:bg-accent-hover active:bg-accent-pressed text-on-accent rounded-full h-10 text-[14px] font-semibold" data-act="exit-keep">${pending.has(keyOf("exit-keep", "")) ? "Fechando…" : "Fechar, mas continuar filtrando"}</button>
+        <button class="border border-line hover:bg-card-hover rounded-full h-10 text-[14px]" data-act="exit-stop">${pending.has(keyOf("exit-stop", "")) ? "Parando a proteção…" : "Sair e parar a proteção"}</button>
         <button class="hover:bg-card-hover rounded-full h-10 text-[14px] text-muted" data-act="exit-cancel">Cancelar</button>
       </div>
     </div>
@@ -126,6 +153,7 @@ function render() {
     ${toastText ? `<div class="absolute bottom-5 left-1/2 -translate-x-1/2 bg-ink text-page text-[14px] font-medium px-5 py-2.5 rounded-full shadow-[var(--shadow)] z-30 flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>${esc(toastText)}</div>` : ""}
   </div>`;
   if (sameRoute) document.getElementById("content")!.scrollTop = keep;
+  markPending();
 }
 
 function toast(text: string) {
@@ -193,7 +221,16 @@ const actions: Record<string, (arg: string, el: HTMLElement) => unknown> = {
       toast(String(e));
     }
   },
-  "dismiss-banner": () => patch({ banner_dismissed: true }),
+  "dismiss-banner": () => {
+    const st = ui.view.settings;
+    // the set-up prompts are closed for good; a system message only until it changes
+    if (!st.apply_to_system || !ui.view.admin) return patch({ banner_dismissed: true });
+    ui.dismissedMsg = P.msgKey(ui.view.system_msg ?? "");
+    try {
+      localStorage.setItem("dismissed-msg", ui.dismissedMsg);
+    } catch {}
+    render();
+  },
   "set-dns": (a) => patch({ dns_server: a }),
   "test-dns": async (a) => {
     ui.dnsTest[a] = "Testando…";
@@ -280,7 +317,22 @@ document.addEventListener("click", (ev) => {
   if (!el) return;
   ev.preventDefault();
   ev.stopPropagation();
-  actions[el.dataset.act!]?.(el.dataset.arg ?? "", el);
+  const act = el.dataset.act!;
+  const arg = el.dataset.arg ?? "";
+  const key = keyOf(act, arg);
+  if (pending.has(key) || el.dataset.loading === "true") return;
+  if (act.startsWith("exit-") && [...pending].some((k) => k.startsWith("exit-"))) return;
+  const result = actions[act]?.(arg, el);
+  if (!(result instanceof Promise)) return;
+  pending.add(key);
+  const timer = window.setTimeout(render, LOADING_DELAY);
+  result
+    .catch((e) => toast(String(e)))
+    .finally(() => {
+      clearTimeout(timer);
+      pending.delete(key);
+      render();
+    });
 });
 
 document.addEventListener("submit", (ev) => {

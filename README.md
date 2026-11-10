@@ -73,6 +73,9 @@ cargo test
 O frontend é empacotado no binário, então rode `npm run build` antes de `cargo build`/`cargo run`
 sempre que mudar algo em `web/`.
 
+Com `--minimized` o app inicia só na bandeja, sem abrir a janela. É assim que a opção
+"Iniciar com o Windows" registra o app no Windows.
+
 ## Gerar o instalador (MSI)
 
 ```powershell
