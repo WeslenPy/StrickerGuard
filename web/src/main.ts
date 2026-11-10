@@ -89,7 +89,7 @@ function sidebar() {
     </button>`;
   };
   return `<nav class="h-full ${wide ? "w-[220px]" : "w-[56px]"} shrink-0 border-r border-sideline flex flex-col bg-page" data-tauri-drag-region>
-    <div class="h-[72px] flex items-center ${wide ? "px-4 gap-3" : "justify-center"}" data-tauri-drag-region>${icon.logo(28)}${wide ? `<span class="text-[17px] font-bold tracking-[-0.02em]" style="font-family:var(--font-display)">stricker<span class="text-brand">guard</span></span>` : ""}</div>
+    <div class="h-[72px] flex items-center ${wide ? "px-4 gap-3" : "justify-center"}" data-tauri-drag-region>${icon.logo(28)}${wide ? `<span class="text-[17px] font-bold tracking-[-0.02em]" style="font-family:var(--font-display)">Stricker<span class="text-brand">Guard</span></span>` : ""}</div>
     ${nav.map(([r, l, ic]) => item(r, l, ic())).join("")}
     ${item("updates", ui.view.updating ? "Atualizando filtros…" : "Verificar atualizações", `<span class="${ui.view.updating ? "spin inline-block" : ""}">${icon.refresh()}</span>`, "update-filters")}
     <div class="flex-1" data-tauri-drag-region></div>
@@ -141,6 +141,9 @@ function applyTheme() {
     localStorage.setItem("theme", t); // read by index.html so the splash opens in this theme
   } catch {}
 }
+
+/** Shortest time the splash stays on screen, counted from page start (ms). */
+const SPLASH_MIN_MS = 4000;
 
 /** Fades out the splash screen from index.html once the first screen is drawn. */
 function hideSplash() {
@@ -392,8 +395,10 @@ async function start() {
     el?.insertAdjacentHTML("beforeend", `<div class="err">Não foi possível iniciar o StrickerGuard.<br>${esc(String(e))}</div>`);
     return;
   }
-  // wait one frame so the first screen is painted under the splash before it fades
-  requestAnimationFrame(() => requestAnimationFrame(hideSplash));
+  // keep the splash up for at least SPLASH_MIN_MS since the page started (so its entrance
+  // animation plays instead of flashing by); the first screen is already drawn underneath
+  const wait = Math.max(0, SPLASH_MIN_MS - performance.now());
+  window.setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(hideSplash)), wait);
   listen("state-changed", async () => {
     const editing = document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "INPUT";
     ui.view = await api.state();
